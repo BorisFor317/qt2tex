@@ -44,5 +44,19 @@ compile_commands.json
 CTestTestfile.cmake
 _deps
 
+# LaTeX
+*.aux
+*.lof
+*.log
+*.lot
+*.fls
+*.out
+*.toc
+*.fmt
+*.fot
+*.cb
+*.cb2
+.*.lb
+
 # Idea
 ./idea
