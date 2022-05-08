@@ -59,4 +59,4 @@ _deps
 .*.lb
 
 # Idea
-./idea
+.idea/
