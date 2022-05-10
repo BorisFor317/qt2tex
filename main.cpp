@@ -1,84 +1,308 @@
 #include <memory>
 #include <iostream>
+#include <QFile>
 #include <QString>
 #include <QVector>
+#include <QTextStream>
+#include <utility>
 
-class ILaTeXElement {
+class ILaTeXElement
+{
 public:
-    class IReader {
+    class IReader
+    {
     public:
         virtual QString readLine() = 0;
+
         virtual bool atEnd() const = 0;
+
         virtual ~IReader() = default;
     };
 
     virtual std::unique_ptr<IReader> getReader() const = 0;
 };
 
-class Paragraph final : public ILaTeXElement {
+class LaTeXParagraph final: public ILaTeXElement
+{
 public:
-    explicit Paragraph(const QVector <QString> &sentences) : _sentences(sentences) {}
+    explicit LaTeXParagraph(const QVector<QString> &sentences)
+        : _sentences(sentences)
+    {}
 
-    std::unique_ptr<IReader> getReader() const override {
+    std::unique_ptr<IReader> getReader() const override
+    {
         return std::make_unique<Reader>(this);
     }
 
 private:
-    class Reader final : public IReader {
-    public:
-        explicit Reader(const Paragraph *source) : _source(source) {}
+    QVector<QString> _sentences;
 
-        QString readLine() override {
-            if (atEnd())
-            {
+    class Reader final: public IReader
+    {
+    public:
+        explicit Reader(const LaTeXParagraph *source)
+            : _source(source)
+        {}
+
+        QString readLine() override
+        {
+            if (atEnd()) {
                 return {};
             }
-            QString newLine = _source->_sentences[_position] + QString('\n');
-            ++_position;
-            return newLine;
+            return _source->_sentences[_position++];
         }
 
-        inline bool atEnd() const override {
+        inline bool atEnd() const override
+        {
             return _position == _source->_sentences.count();
         }
 
         ~Reader() override = default;
 
     private:
-        std::size_t _position = 0;
-        const Paragraph* _source;
+        const LaTeXParagraph *_source;
+        int _position = 0;
     };
-
-    QVector<QString> _sentences;
 };
 
-
-//class LaTeXDocument {
-//public:
-//    void render() {
-//        _out << _preamble << "\n";
-//        _out << documentBegin() << "\n";
-//        for (auto element = _elements.constBegin(); element != _elements.constEnd(); ++element) {
-//            auto elementReader = element->getReader();
-//            while (!elementReader->atEnd())
-//            {
-//                _out << _line_start << element->readLine() << "\n";
-//            }
-//        }
-//        _out << documentEnd() << "\n";
-//    }
-//
-//private:
-//    QVector<ILaTeXElement> _elements;
-//};
-
-int main(int argc, char *argv[]) {
-    Paragraph par({"Hello world.", "We are all good friends.", "Let's go to bad"});
-    auto reader = par.getReader();
-    while (!reader->atEnd()) {
-        std::cout << reader->readLine().toStdString();
+class LaTeXLongTable: public ILaTeXElement
+{
+public:
+    std::unique_ptr<IReader> getReader() const override
+    {
+        return std::make_unique<Reader>(this);
     }
-    reader.release();
+
+    struct Column
+    {
+        Column(QString name, const QChar &type)
+            : name(std::move(name)), type(type)
+        {}
+
+        QString name;
+        QChar type;
+    };
+
+    struct Row
+    {
+        explicit Row(const QList<QString> &columns)
+            : columns(columns)
+        {}
+
+        Row(std::initializer_list<QString> columns)
+            : columns(columns)
+        {}
+
+        QList<QString> columns;
+    };
+
+    LaTeXLongTable(QString label,
+                   const QVector<Column> &columns,
+                   const QVector<Row> &rows)
+        : _label(std::move(label)), _columns(columns), _rows(rows)
+    {}
+
+private:
+    QString _label;
+    QVector<Column> _columns;
+    QVector<Row> _rows;
+
+    class Reader: public IReader
+    {
+    public:
+        explicit Reader(const LaTeXLongTable *parent)
+            : _parent(parent)
+        {}
+
+        QString readLine() override
+        {
+            if (atEnd()) {
+                return {};
+            }
+
+            QString result;
+            if (_position == 0) {
+                result = getTableBegin();
+            }
+            else if (_position == 1) {
+                result = getTableLabel();
+            }
+            else if (_position == 2) {
+                result = getTableHeader();
+            }
+            else if (allRowsReady()) {
+                result = TableEnd;
+            }
+            else {
+                result = getRow(getCurrentRowIndex());
+            }
+
+            ++_position;
+            return result;
+        }
+
+        bool atEnd() const override
+        {
+            return _position == _parent->_rows.count() + 4;
+        }
+
+    private:
+        const LaTeXLongTable *_parent;
+        int _position = 0;
+
+        const QString TableBegin = "\\begin{xltabular}[l]{\\textwidth}{%1}";
+        const QString TableLabel = "\\multicolumn{10}{l}{\\hspace{-\\tabcolsep}%1} \\\\ \\hline";
+        const QString TableEnd = "\\end{xltabular}";
+
+        const QString RowStart = "    ";
+        const QString RowEnd = "\\\\ \\hline";
+
+        const QString ColumnSeparator = " & ";
+        const QChar ColumnTypeSeparator = '|';
+
+        inline QString getTableBegin() const
+        {
+            return TableBegin.arg(getCols());
+        }
+
+        QString getCols() const
+        {
+            QVector<Column> columns = _parent->_columns;
+            auto cols = QString();
+            cols.reserve(2 * columns.count() + 1);
+            cols.append(ColumnTypeSeparator);
+            for (auto c = columns.cbegin(); c != columns.cend(); ++c) {
+                cols.append(c->type);
+                cols.append(ColumnTypeSeparator);
+            }
+
+            return cols;
+        }
+
+        inline QString getTableLabel() const
+        {
+            return TableLabel.arg(_parent->_label);
+        }
+
+        QString getTableHeader() const
+        {
+            QVector<Column> columns = _parent->_columns;
+            QStringList header;
+            header.reserve(columns.count());
+            for (auto c = columns.cbegin(); c != columns.cend(); ++c) {
+                header.append(c->name);
+            }
+
+            return header.join(ColumnSeparator).prepend(RowStart).append(RowEnd);
+        }
+
+        QString getRow(int rowIndex) const
+        {
+            if (_parent->_rows.count() < rowIndex || rowIndex < 0) {
+                return {};
+            }
+
+            Row row = _parent->_rows.at(rowIndex);
+            int columnsCount = _parent->_columns.count();
+            if (row.columns.count() != columnsCount) {
+                throw std::exception();
+            }
+
+            QStringList rowValues(row.columns);
+            return rowValues.join(ColumnSeparator).prepend(RowStart).append(RowEnd);
+        }
+
+        inline int getCurrentRowIndex() const
+        {
+            return _position - 3;
+        }
+
+        inline bool allRowsReady() const
+        {
+            return _position == _parent->_rows.count() + 3;
+        }
+    };
+};
+
+class LaTeXDocument
+{
+public:
+    LaTeXDocument(QString preamble, QVector<std::shared_ptr<ILaTeXElement>> elements)
+        : _preamble(std::move(preamble)), _elements(std::move(elements))
+    {}
+
+    void render(QTextStream &out) const
+    {
+        out << _preamble << "\n";
+        out << DocumentBegin << "\n";
+        for (auto element = _elements.cbegin(); element != _elements.cend(); ++element) {
+            auto elementReader = element->get()->getReader();
+            while (!elementReader->atEnd()) {
+                out << LineStart << elementReader->readLine() << "\n";
+            }
+        }
+        out << DocumentEnd << "\n";
+    }
+
+private:
+    QString _preamble;
+    QVector<std::shared_ptr<ILaTeXElement>> _elements;
+
+    const QString LineStart = "    ";
+    const QString DocumentBegin = "\\begin{document}";
+    const QString DocumentEnd = "\\end{document}";
+};
+
+const QString Preamble = "\\documentclass[a4paper, 9pt]{article}\n"
+                         "\n"
+                         "\\usepackage[utf8]{inputenc}\n"
+                         "\\usepackage[T1,T2A]{fontenc}\n"
+                         "\\usepackage[russian, english]{babel}\n"
+                         "\\usepackage[landscape]{geometry}\n"
+                         "\\geometry{\n"
+                         "    a4paper,\n"
+                         "    total={210mm,297mm},\n"
+                         "    left=20mm,\n"
+                         "    right=20mm,\n"
+                         "    top=20mm,\n"
+                         "    bottom=20mm\n"
+                         "}\n"
+                         "\\usepackage{indentfirst}\n"
+                         "\\setlength{\\parindent}{0pt}\n"
+                         "\\usepackage{lastpage}\n"
+                         "\\usepackage{array}\n"
+                         "\\usepackage{xltabular}\n"
+                         "\\setlength{\\tabcolsep}{2pt}\n"
+                         "\\newcolumntype{T}{>{\\centering\\arraybackslash}p{16.5mm}}\n"
+                         "\\newcolumntype{S}{>{\\centering\\arraybackslash}p{5mm}}\n"
+                         "\\newcolumntype{I}{>{\\centering\\arraybackslash}p{7.5mm}}\n"
+                         "\\newcolumntype{L}{>{\\centering\\arraybackslash}p{11mm}}\n"
+                         "\\newcolumntype{C}{>{\\centering\\arraybackslash}X}";
+
+int main(int argc, char *argv[])
+{
+    QVector<QString> tmp{"Hello world.", "We are all good friends.", "Let's go to bad"};
+    auto par = std::make_shared<LaTeXParagraph>(tmp);
+
+    QVector<LaTeXLongTable::Column> columns{
+        LaTeXLongTable::Column{"Время", 'T'},
+        LaTeXLongTable::Column{"№ машины", 'I'},
+        LaTeXLongTable::Column{"Имя машины", 'C'},
+    };
+    QVector<LaTeXLongTable::Row> rows{
+        LaTeXLongTable::Row{
+            "2022-03-03 10:23:30", "10", "ППРУ"
+        },
+        LaTeXLongTable::Row{
+            "2022-03-03 10:23:30", "10", "ППРУ"
+        }
+    };
+    auto table = std::make_shared<LaTeXLongTable>("Таблица №1488", columns, rows);
+    LaTeXDocument document(Preamble, {par, table, par});
+
+    QTextStream stream(stdout);
+    document.render(stream);
+    stream.flush();
 
     return 0;
 }
