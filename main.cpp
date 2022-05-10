@@ -2,7 +2,6 @@
 #include <iostream>
 #include <QString>
 #include <QVector>
-#include <utility>
 
 class ILaTeXElement {
 public:
