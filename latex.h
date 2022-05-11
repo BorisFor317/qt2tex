@@ -228,6 +228,7 @@ private:
             }
 
             QStringList rowValues(row.values);
+
             return rowValues.join(ColumnSeparator).prepend(RowStart).append(RowEnd);
         }
 
@@ -300,6 +301,81 @@ private:
     const QString LineStart = "    ";
     const QString DocumentBegin = "\\begin{document}";
     const QString DocumentEnd = "\\end{document}";
+};
+
+bool render_pdf(const QFileInfo &outputFile, const LaTeXDocument &document, QObject *parent = nullptr)
+{
+    const QString command = "pdflatex";
+
+    QTemporaryDir tmp;
+    if (!tmp.isValid()) {
+        return false;
+    }
+
+    QString tmpTexFilePath = tmp.filePath("main.tex");
+    QFile tmpTexFile(tmpTexFilePath, parent);
+    if (!tmpTexFile.open(QIODevice::WriteOnly)) {
+        return false;
+    }
+
+    QTextStream tmpTexStream(&tmpTexFile);
+    document.render(tmpTexStream);
+    tmpTexFile.close();
+
+    // launch pdflatex 2 times (1st for calculate total size of document)
+    // no generating pdf
+    auto outDirParam = QString("-output-directory=%1").arg(tmp.path());
+
+    QProcess firstPass(parent);
+    firstPass.start(
+        command,
+        {
+            "-draftmode",
+            outDirParam,
+            tmpTexFilePath
+        });
+
+    if (!firstPass.waitForFinished()) {
+        return false;
+    }
+
+    QProcess secondPass(parent);
+    secondPass.start(
+        command,
+        {
+            outDirParam,
+            tmpTexFilePath
+        });
+
+    if (!secondPass.waitForFinished()) {
+        return false;
+    }
+
+    if (outputFile.exists())
+    {
+        QFile(outputFile.filePath()).remove();
+    }
+
+    return QFile::copy(
+        tmp.filePath("main.pdf"),
+        outputFile.filePath());
+}
+
+bool render_pdf(const QString &outputFilePath, const LaTeXDocument &document, QObject *parent = nullptr)
+{
+    return render_pdf(
+        QFileInfo(outputFilePath),
+        document,
+        parent);
+}
+
+class LaTeXPdfRenderer
+{
+public:
+    bool render()
+    {
+
+    }
 };
 
 #endif //LATEX_H

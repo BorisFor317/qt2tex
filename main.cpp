@@ -50,5 +50,11 @@ int main(int argc, char *argv[])
     out_file_stream.flush();
     out_file.close();
 
+//    auto a = laTeXSymbols::newLine;
+
+//    QChar::SpecialCharacter::LineSeparator
+
+//    render_pdf("my.pdf", document);
+
     return 0;
 }
