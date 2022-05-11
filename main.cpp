@@ -6,7 +6,13 @@
 int main(int argc, char *argv[])
 {
     auto par = std::make_shared<LaTeXParagraph>();
-    par->sentences.append({"Hello world.", "Let's go to bad.", "Сложно, почему так сложно."});
+    par->sentences.append({
+        "Hello world.",
+        "Let's go to bad.",
+        "Сложно, почему так сложно.",
+        QString("Total pages: %1").arg(LaTeXSymbols::totalPages())
+    });
+
     auto table = std::make_shared<LaTeXLongTable>(
         "Таблица №1337", QVector<LaTeXLongTable::Column>{
             LaTeXLongTable::Column{"Время", 'T'},
@@ -27,7 +33,7 @@ int main(int argc, char *argv[])
             }
         });
 
-    LaTeXDocument document({par, table, par});
+    LaTeXDocument document({par, table, par, table, par, table, par});
 
     // write to stdout
     QTextStream stream(stdout);

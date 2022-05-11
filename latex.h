@@ -7,7 +7,19 @@
 #include <QString>
 #include <QVector>
 #include <QTextStream>
-#include <utility>
+#include <QFile>
+#include <QFileInfo>
+#include <QProcess>
+#include <QTemporaryFile>
+#include <QTemporaryDir>
+
+struct LaTeXSymbols
+{
+    static inline QString newLine() { return "\\\\"; }
+    static inline QString totalPages() { return "\\pageref{LastPage}"; }
+
+    LaTeXSymbols() = delete;
+};
 
 class ILaTeXElement
 {
