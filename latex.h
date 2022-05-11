@@ -38,7 +38,7 @@ public:
 
     std::unique_ptr<IReader> getReader() const override
     {
-        return std::make_unique<Reader>(this);
+        return std::unique_ptr<Reader>(new Reader(this));
     }
 
 private:
@@ -104,7 +104,7 @@ public:
 
     std::unique_ptr<IReader> getReader() const override
     {
-        return std::make_unique<Reader>(this);
+        return std::unique_ptr<Reader>(new Reader(this));
     }
 
 private:
