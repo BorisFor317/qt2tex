@@ -13,19 +13,17 @@
 #include <QTemporaryFile>
 #include <QTemporaryDir>
 
-struct LaTeXSymbols
-{
+struct LaTeXSymbols {
     static inline QString newLine() { return "\\\\"; }
+
     static inline QString totalPages() { return "\\pageref{LastPage}"; }
 
     LaTeXSymbols() = delete;
 };
 
-class ILaTeXElement
-{
+class ILaTeXElement {
 public:
-    class IReader
-    {
+    class IReader {
     public:
         virtual QString readLine() = 0;
 
@@ -37,40 +35,46 @@ public:
     virtual std::unique_ptr<IReader> getReader() const = 0;
 };
 
-class LaTeXParagraph final: public ILaTeXElement
-{
+class LaTeXParagraph final : public ILaTeXElement {
 public:
     QVector<QString> sentences;
 
     LaTeXParagraph() = default;
 
     LaTeXParagraph(std::initializer_list<QString> sentences)
-        : sentences(sentences)
-    {}
+            : sentences(sentences) {}
 
-    std::unique_ptr<IReader> getReader() const override
-    {
+    std::unique_ptr<IReader> getReader() const override {
         return std::unique_ptr<Reader>(new Reader(this));
     }
 
 private:
-    class Reader final: public IReader
-    {
+    class Reader final : public IReader {
     public:
         explicit Reader(const LaTeXParagraph *source)
-            : _source(source)
-        {}
+                : _source(source) {}
 
-        QString readLine() override
-        {
-            if (atEnd()) {
-                return {};
+        QString readLine() override {
+            QString result;
+            if (allSentencesReady()) {
+                result = "";
             }
-            return _source->sentences[_position++];
+            else if (atEnd()) {
+                result = "";
+            }
+            else {
+                result = _source->sentences[_position];
+            }
+
+            ++_position;
+            return result;
         }
 
-        inline bool atEnd() const override
-        {
+        inline bool atEnd() const override {
+            return _position == _source->sentences.count() + 1;
+        }
+
+        inline bool allSentencesReady() const {
             return _position == _source->sentences.count();
         }
 
@@ -82,40 +86,33 @@ private:
     };
 };
 
-class LaTeXLongTable: public ILaTeXElement
-{
+class LaTeXLongTable : public ILaTeXElement {
 public:
-    struct Column
-    {
+    struct Column {
         Column() = default;
 
         Column(QString name, const QChar &type)
-            : name(std::move(name)), type(type)
-        {}
+                : name(std::move(name)), type(type) {}
 
         QString name;
         QChar type;
     };
 
-    struct Row
-    {
+    struct Row {
         Row() = default;
 
         Row(std::initializer_list<QString> values)
-            : values(values)
-        {}
+                : values(values) {}
 
         QList<QString> values;
     };
 
     LaTeXLongTable(QString label, QVector<Column> columns)
-        : _label(std::move(label)), _columns(std::move(columns))
-    {}
+            : _label(std::move(label)), _columns(std::move(columns)) {}
 
     QVector<Row> rows;
 
-    std::unique_ptr<IReader> getReader() const override
-    {
+    std::unique_ptr<IReader> getReader() const override {
         return std::unique_ptr<Reader>(new Reader(this));
     }
 
@@ -123,15 +120,12 @@ private:
     QString _label;
     QVector<Column> _columns;
 
-    class Reader: public IReader
-    {
+    class Reader : public IReader {
     public:
         explicit Reader(const LaTeXLongTable *parent)
-            : _parent(parent)
-        {}
+                : _parent(parent) {}
 
-        QString readLine() override
-        {
+        QString readLine() override {
             if (atEnd()) {
                 return {};
             }
@@ -139,17 +133,13 @@ private:
             QString result;
             if (_position == 0) {
                 result = getTableBegin();
-            }
-            else if (_position == 1) {
+            } else if (_position == 1) {
                 result = getTableLabel();
-            }
-            else if (_position == 2) {
+            } else if (_position == 2) {
                 result = getTableHeader();
-            }
-            else if (allRowsReady()) {
+            } else if (allRowsReady()) {
                 result = TableEnd;
-            }
-            else {
+            } else {
                 result = getRow(getCurrentRowIndex());
             }
 
@@ -157,8 +147,7 @@ private:
             return result;
         }
 
-        bool atEnd() const override
-        {
+        bool atEnd() const override {
             return _position == _parent->rows.count() + 4;
         }
 
@@ -176,13 +165,11 @@ private:
         const QString ColumnSeparator = " & ";
         const QChar ColumnTypeSeparator = '|';
 
-        inline QString getTableBegin() const
-        {
+        inline QString getTableBegin() const {
             return TableBegin.arg(getCols());
         }
 
-        QString getCols() const
-        {
+        QString getCols() const {
             QVector<Column> columns = _parent->_columns;
             auto cols = QString();
             cols.reserve(2 * columns.count() + 1);
@@ -195,16 +182,14 @@ private:
             return cols;
         }
 
-        inline QString getTableLabel() const
-        {
+        inline QString getTableLabel() const {
             return TableLabel.arg(
-                    QString::number(_parent->_columns.count()),
-                    _parent->_label)
-                .prepend(RowStart);
+                            QString::number(_parent->_columns.count()),
+                            _parent->_label)
+                    .prepend(RowStart);
         }
 
-        QString getTableHeader() const
-        {
+        QString getTableHeader() const {
             QVector<Column> columns = _parent->_columns;
             QStringList header;
             header.reserve(columns.count());
@@ -215,8 +200,7 @@ private:
             return header.join(ColumnSeparator).prepend(RowStart).append(RowEnd);
         }
 
-        QString getRow(int rowIndex) const
-        {
+        QString getRow(int rowIndex) const {
             if (_parent->rows.count() < rowIndex || rowIndex < 0) {
                 return {};
             }
@@ -232,13 +216,11 @@ private:
             return rowValues.join(ColumnSeparator).prepend(RowStart).append(RowEnd);
         }
 
-        inline int getCurrentRowIndex() const
-        {
+        inline int getCurrentRowIndex() const {
             return _position - 3;
         }
 
-        inline bool allRowsReady() const
-        {
+        inline bool allRowsReady() const {
             return _position == _parent->rows.count() + 3;
         }
     };
@@ -270,19 +252,15 @@ const QString DefaultPreamble = "\\documentclass[a4paper, 10pt]{article}\n"
                                 "\\newcolumntype{L}{>{\\centering\\arraybackslash}p{11mm}}\n"
                                 "\\newcolumntype{C}{>{\\centering\\arraybackslash}X}";
 
-class LaTeXDocument
-{
+class LaTeXDocument {
 public:
     explicit LaTeXDocument(const QVector<std::shared_ptr<ILaTeXElement>> &elements)
-        : _preamble(DefaultPreamble), _elements(elements)
-    {}
+            : _preamble(DefaultPreamble), _elements(elements) {}
 
     LaTeXDocument(QString preamble, QVector<std::shared_ptr<ILaTeXElement>> elements)
-        : _preamble(std::move(preamble)), _elements(std::move(elements))
-    {}
+            : _preamble(std::move(preamble)), _elements(std::move(elements)) {}
 
-    void render(QTextStream &out) const
-    {
+    void render(QTextStream &out) const {
         out << _preamble << "\n";
         out << DocumentBegin << "\n";
         for (auto element = _elements.cbegin(); element != _elements.cend(); ++element) {
@@ -303,8 +281,7 @@ private:
     const QString DocumentEnd = "\\end{document}";
 };
 
-bool render_pdf(const QFileInfo &outputFile, const LaTeXDocument &document, QObject *parent = nullptr)
-{
+bool render_pdf(const QFileInfo &outputFile, const LaTeXDocument &document, QObject *parent = nullptr) {
     const QString command = "pdflatex";
 
     QTemporaryDir tmp;
@@ -323,17 +300,16 @@ bool render_pdf(const QFileInfo &outputFile, const LaTeXDocument &document, QObj
     tmpTexFile.close();
 
     // launch pdflatex 2 times (1st for calculate total size of document)
-    // no generating pdf
     auto outDirParam = QString("-output-directory=%1").arg(tmp.path());
 
     QProcess firstPass(parent);
     firstPass.start(
-        command,
-        {
-            "-draftmode",
-            outDirParam,
-            tmpTexFilePath
-        });
+            command,
+            {
+                    "-draftmode",
+                    outDirParam,
+                    tmpTexFilePath
+            });
 
     if (!firstPass.waitForFinished()) {
         return false;
@@ -341,41 +317,40 @@ bool render_pdf(const QFileInfo &outputFile, const LaTeXDocument &document, QObj
 
     QProcess secondPass(parent);
     secondPass.start(
-        command,
-        {
-            outDirParam,
-            tmpTexFilePath
-        });
+            command,
+            {
+                    outDirParam,
+                    tmpTexFilePath
+            });
 
     if (!secondPass.waitForFinished()) {
         return false;
     }
 
-    if (outputFile.exists())
-    {
+    if (outputFile.exists()) {
         QFile(outputFile.filePath()).remove();
     }
 
     return QFile::copy(
-        tmp.filePath("main.pdf"),
-        outputFile.filePath());
+            tmp.filePath("main.pdf"),
+            outputFile.filePath());
 }
 
-bool render_pdf(const QString &outputFilePath, const LaTeXDocument &document, QObject *parent = nullptr)
-{
+bool render_pdf(const QString &outputFilePath, const LaTeXDocument &document, QObject *parent = nullptr) {
     return render_pdf(
-        QFileInfo(outputFilePath),
-        document,
-        parent);
+            QFileInfo(outputFilePath),
+            document,
+            parent);
 }
 
-class LaTeXPdfRenderer
-{
+class PdfRenderer {
 public:
-    bool render()
-    {
+    bool render(const QFile &output, const LaTeXDocument &document) {
 
     }
+
+private:
+    QObject *_parent;
 };
 
 #endif //LATEX_H

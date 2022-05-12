@@ -33,7 +33,7 @@ int main(int argc, char *argv[])
             }
         });
 
-    LaTeXDocument document({par, table, par, table, par, table, par});
+    LaTeXDocument document({par, par, par});
 
     // write to stdout
     QTextStream stream(stdout);
