@@ -54,7 +54,7 @@ int main(int argc, char *argv[])
 
 //    QChar::SpecialCharacter::LineSeparator
 
-//    render_pdf("my.pdf", document);
+    render_pdf("my.pdf", document);
 
     return 0;
 }

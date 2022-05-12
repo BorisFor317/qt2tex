@@ -56,9 +56,7 @@ private:
 
         QString readLine() override {
             QString result;
-            if (allSentencesReady()) {
-                result = "";
-            } else if (atEnd()) {
+            if (atEnd()) {
                 result = "";
             } else {
                 result = _source->sentences[_position];
@@ -69,12 +67,12 @@ private:
         }
 
         inline bool atEnd() const override {
-            return _position == _source->sentences.count() + 1;
-        }
-
-        inline bool allSentencesReady() const {
             return _position == _source->sentences.count();
         }
+//
+//        inline bool allSentencesReady() const {
+//            return _position == _source->sentences.count();
+//        }
 
         ~Reader() override = default;
 
@@ -266,6 +264,7 @@ public:
             while (!elementReader->atEnd()) {
                 out << LineStart << elementReader->readLine() << "\n";
             }
+            out << "\n";
         }
         out << DocumentEnd << "\n";
     }
