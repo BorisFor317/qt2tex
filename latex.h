@@ -58,11 +58,9 @@ private:
             QString result;
             if (allSentencesReady()) {
                 result = "";
-            }
-            else if (atEnd()) {
+            } else if (atEnd()) {
                 result = "";
-            }
-            else {
+            } else {
                 result = _source->sentences[_position];
             }
 
