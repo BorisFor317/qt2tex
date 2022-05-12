@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.1.0)
 
-set(PROJECT_NAME table_generator)
+set(PROJECT_NAME qt2tex)
 
 project(${PROJECT_NAME} VERSION 1.0.0 LANGUAGES CXX)
 

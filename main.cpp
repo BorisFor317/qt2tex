@@ -1,4 +1,5 @@
 #include <memory>
+#include <iostream>
 #include <QVector>
 #include <QFile>
 #include "latex.h"
@@ -7,11 +8,11 @@ int main(int argc, char *argv[])
 {
     auto par = std::make_shared<LaTeXParagraph>();
     par->sentences.append({
-        "Hello world.",
-        "Let's go to bad.",
-        "Сложно, почему так сложно.",
-        QString("Total pages: %1").arg(LaTeXSymbols::totalPages())
-    });
+                              "Hello world.",
+                              "Let's go to bad.",
+                              "Сложно, почему так сложно.",
+                              QString("Total pages: %1").arg(LaTeXSymbols::totalPages())
+                          });
 
     auto table = std::make_shared<LaTeXLongTable>(
         "Таблица №1337", QVector<LaTeXLongTable::Column>{
@@ -33,7 +34,7 @@ int main(int argc, char *argv[])
             }
         });
 
-    LaTeXDocument document({par, par, par});
+    LaTeXDocument document({par, par, table, par, table});
 
     // write to stdout
     QTextStream stream(stdout);
@@ -50,11 +51,14 @@ int main(int argc, char *argv[])
     out_file_stream.flush();
     out_file.close();
 
-//    auto a = laTeXSymbols::newLine;
-
-//    QChar::SpecialCharacter::LineSeparator
-
-    render_pdf("my.pdf", document);
+//    TeXFileRenderer teXFileRenderer;
+    PdfFileRenderer pdfRenderer(nullptr, 2000);
+    if (pdfRenderer.render("my.pdf", document)) {
+        std::cout << "OK";
+    }
+    else {
+        std::cout << "ERROR";
+    }
 
     return 0;
 }
