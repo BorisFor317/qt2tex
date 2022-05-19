@@ -285,7 +285,7 @@ class BaseDocument
 public:
     void render(QTextStream &out) const
     {
-        out << getPreamble() << "\n";
+        out << getPreamble() << "\n\n";
         out << DocumentBegin << "\n";
         for (auto element = _elements.cbegin(); element != _elements.cend(); ++element) {
             auto elementReader = element->get()->getReader();
@@ -359,12 +359,12 @@ public:
         QString asCommand() const
         {
             if (autoFit) {
-                return QString("\\newcolumntype{%1}{>{\\%2\\arraybackslash}X)").arg(
+                return QString("\\newcolumntype{%1}{>{\\%2\\arraybackslash}X}").arg(
                     name,
                     getAlignmentCommand());
             }
             else {
-                return QString("\\newcolumntype{%1}{>{\\%2\\arraybackslash}p{%3mm})").arg(
+                return QString("\\newcolumntype{%1}{>{\\%2\\arraybackslash}p{%3mm}}").arg(
                     name,
                     getAlignmentCommand(),
                     QString::number(size));
@@ -404,7 +404,7 @@ public:
             ColumnType{'S', ColumnType::Center, 4, false},
             ColumnType{'I', ColumnType::Center, 7, false},
             ColumnType{'L', ColumnType::Center, 11, false},
-            ColumnType{'X', ColumnType::Center, 0, true},
+            ColumnType{'C', ColumnType::Center, 0, true},
         };
 
         Options(uint8_t fontSize,
@@ -451,7 +451,7 @@ protected:
                 "\\usepackage{array}",
                 "\\usepackage{xltabular}",
                 "\\usepackage{fontspec}",
-                QString("\\setlength{\\tabcolsep}{%pt}").arg(options.columnSep),
+                QString("\\setlength{\\tabcolsep}{%1pt}").arg(options.columnSep),
                 QString("\\setmainfont{%1}").arg(options.mainFont),
                 QString("\\setsansfont{%1}").arg(options.sansFont),
                 QString("\\setmonofont{%1}").arg(options.monoFont)
@@ -532,9 +532,9 @@ bool render_pdf(const QString &outputFilePath, const LaTeXDocument &document, QO
 class FileRenderer
 {
 public:
-    virtual bool render(const QFileInfo &output, const LaTeXDocument &document) = 0;
+    virtual bool render(const QFileInfo &output, const BaseDocument &document) = 0;
 
-    bool render(const QString &outputPath, const LaTeXDocument &document)
+    bool render(const QString &outputPath, const BaseDocument &document)
     {
         return render(QFileInfo(outputPath), document);
     }
@@ -549,7 +549,7 @@ public:
 
     using FileRenderer::render;
 
-    bool render(const QFileInfo &output, const LaTeXDocument &document) override
+    bool render(const QFileInfo &output, const BaseDocument &document) override
     {
         QFile outputFile(output.filePath(), _parent);
         if (!outputFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
@@ -592,7 +592,7 @@ public:
 
     using FileRenderer::render;
 
-    bool render(const QFileInfo &output, const LaTeXDocument &document) override final
+    bool render(const QFileInfo &output, const BaseDocument &document) override final
     {
         QTemporaryDir tmp;
         QString tmpTexFile;
@@ -619,7 +619,7 @@ private:
     const QString TmpTeXFilename = "main.tex";
     const QString TmpPdfFilename = "main.pdf";
 
-    bool writeTmpTexFile(const QTemporaryDir &tmp, const LaTeXDocument &document, QString &outputTexFile)
+    bool writeTmpTexFile(const QTemporaryDir &tmp, const BaseDocument &document, QString &outputTexFile)
     {
         QString tmpTexFile = tmp.filePath(TmpTeXFilename);
         TeXFileRenderer texFileRenderer(_parent);

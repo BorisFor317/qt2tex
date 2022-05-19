@@ -60,7 +60,16 @@ int main(int argc, char *argv[])
     }
 
     LuaLaTeXFileRenderer luaRenderer;
-    if (pdfRenderer.render("lualatex_my.pdf", document)) {
+    LuaDocument luaDocument {par, par, table, par, table};
+    QFile out_file2("lau_main.tex");
+    if (!out_file2.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        return 1;
+    }
+    QTextStream out_file_stream2(&out_file2);
+    luaDocument.render(out_file_stream2);
+    out_file_stream2.flush();
+    out_file2.close();
+    if (luaRenderer.render("lualatex_my.pdf", luaDocument)) {
         std::cout << "lualatex OK" << std::endl;
     }
     else {
