@@ -12,6 +12,7 @@
 #include <QProcess>
 #include <QTemporaryFile>
 #include <QTemporaryDir>
+#include <utility>
 
 struct LaTeXSymbols
 {
@@ -24,7 +25,7 @@ struct LaTeXSymbols
     LaTeXSymbols() = delete;
 };
 
-class ILaTeXElement
+class ITeXElement
 {
 public:
     class IReader
@@ -40,7 +41,7 @@ public:
     virtual std::unique_ptr<IReader> getReader() const = 0;
 };
 
-class LaTeXParagraph final: public ILaTeXElement
+class LaTeXParagraph final: public ITeXElement
 {
 public:
     QVector<QString> sentences;
@@ -91,7 +92,7 @@ private:
     };
 };
 
-class LaTeXLongTable: public ILaTeXElement
+class LaTeXLongTable: public ITeXElement
 {
 public:
     struct Column
@@ -253,46 +254,38 @@ private:
     };
 };
 
-const QString DefaultPreamble = "\\documentclass[a4paper, 10pt]{article}\n"
-                                "\n"
-                                "\\usepackage[utf8]{inputenc}\n"
-                                "\\usepackage[T1,T2A]{fontenc}\n"
-                                "\\usepackage[russian, english]{babel}\n"
-                                "\\usepackage[landscape]{geometry}\n"
-                                "\\geometry{\n"
-                                "    a4paper,\n"
-                                "    total={210mm,297mm},\n"
-                                "    left=20mm,\n"
-                                "    right=20mm,\n"
-                                "    top=20mm,\n"
-                                "    bottom=20mm\n"
-                                "}\n"
-                                "\\usepackage{indentfirst}\n"
-                                "\\setlength{\\parindent}{0pt}\n"
-                                "\\usepackage{lastpage}\n"
-                                "\\usepackage{array}\n"
-                                "\\usepackage{xltabular}\n"
-                                "\\setlength{\\tabcolsep}{2pt}\n"
-                                "\\newcolumntype{T}{>{\\centering\\arraybackslash}p{16.5mm}}\n"
-                                "\\newcolumntype{S}{>{\\centering\\arraybackslash}p{5mm}}\n"
-                                "\\newcolumntype{I}{>{\\centering\\arraybackslash}p{7.5mm}}\n"
-                                "\\newcolumntype{L}{>{\\centering\\arraybackslash}p{11mm}}\n"
-                                "\\newcolumntype{C}{>{\\centering\\arraybackslash}X}";
+const QString DefaultLaTeXPreamble = "\\documentclass[a4paper, 10pt]{article}\n"
+                                     "\n"
+                                     "\\usepackage[utf8]{inputenc}\n"
+                                     "\\usepackage[T1,T2A]{fontenc}\n"
+                                     "\\usepackage[russian, english]{babel}\n"
+                                     "\\usepackage[landscape]{geometry}\n"
+                                     "\\geometry{\n"
+                                     "    a4paper,\n"
+                                     "    total={210mm,297mm},\n"
+                                     "    left=20mm,\n"
+                                     "    right=20mm,\n"
+                                     "    top=20mm,\n"
+                                     "    bottom=20mm\n"
+                                     "}\n"
+                                     "\\usepackage{indentfirst}\n"
+                                     "\\setlength{\\parindent}{0pt}\n"
+                                     "\\usepackage{lastpage}\n"
+                                     "\\usepackage{array}\n"
+                                     "\\usepackage{xltabular}\n"
+                                     "\\setlength{\\tabcolsep}{2pt}\n"
+                                     "\\newcolumntype{T}{>{\\centering\\arraybackslash}p{16.5mm}}\n"
+                                     "\\newcolumntype{S}{>{\\centering\\arraybackslash}p{5mm}}\n"
+                                     "\\newcolumntype{I}{>{\\centering\\arraybackslash}p{7.5mm}}\n"
+                                     "\\newcolumntype{L}{>{\\centering\\arraybackslash}p{11mm}}\n"
+                                     "\\newcolumntype{C}{>{\\centering\\arraybackslash}X}";
 
-class LaTeXDocument
+class BaseDocument
 {
 public:
-    explicit LaTeXDocument(const QVector<std::shared_ptr<ILaTeXElement>> &elements)
-        : _preamble(DefaultPreamble), _elements(elements)
-    {}
-
-    LaTeXDocument(QString preamble, QVector<std::shared_ptr<ILaTeXElement>> elements)
-        : _preamble(std::move(preamble)), _elements(std::move(elements))
-    {}
-
     void render(QTextStream &out) const
     {
-        out << _preamble << "\n";
+        out << getPreamble() << "\n";
         out << DocumentBegin << "\n";
         for (auto element = _elements.cbegin(); element != _elements.cend(); ++element) {
             auto elementReader = element->get()->getReader();
@@ -304,13 +297,172 @@ public:
         out << DocumentEnd << "\n";
     }
 
+protected:
+    explicit BaseDocument(const QVector<std::shared_ptr<ITeXElement>> &elements)
+        : _elements(elements)
+    {}
+
+    virtual QString getPreamble() const = 0;
+
 private:
-    QString _preamble;
-    QVector<std::shared_ptr<ILaTeXElement>> _elements;
+    QVector<std::shared_ptr<ITeXElement>> _elements;
 
     const QString LineStart = "    ";
     const QString DocumentBegin = "\\begin{document}";
     const QString DocumentEnd = "\\end{document}";
+};
+
+class LaTeXDocument final: public BaseDocument
+{
+public:
+    explicit LaTeXDocument(const QVector<std::shared_ptr<ITeXElement>> &elements)
+        : BaseDocument(elements), _preamble(DefaultLaTeXPreamble)
+    {}
+
+    LaTeXDocument(QString preamble, const QVector<std::shared_ptr<ITeXElement>> &elements)
+        : BaseDocument(elements), _preamble(std::move(preamble))
+    {}
+
+protected:
+    QString getPreamble() const override
+    {
+        return _preamble;
+    }
+
+private:
+    QString _preamble;
+};
+
+class LuaDocument final: public BaseDocument
+{
+public:
+    struct ColumnType
+    {
+        enum Alignment
+        {
+            Left,
+            Center,
+            Right
+        };
+
+        QChar name;
+        Alignment alignment;
+        // size in mm
+        uint8_t size;
+        // if is true size is ignored and will be determened by latex
+        bool autoFit;
+
+        ColumnType(const QChar &name, Alignment alignment, uint8_t size, bool autoFit)
+            : name(name), alignment(alignment), size(size), autoFit(autoFit)
+        {}
+
+        QString asCommand() const
+        {
+            if (autoFit) {
+                return QString("\\newcolumntype{%1}{>{\\%2\\arraybackslash}X)").arg(
+                    name,
+                    getAlignmentCommand());
+            }
+            else {
+                return QString("\\newcolumntype{%1}{>{\\%2\\arraybackslash}p{%3mm})").arg(
+                    name,
+                    getAlignmentCommand(),
+                    QString::number(size));
+            }
+        }
+    private:
+        QString getAlignmentCommand() const
+        {
+            if (alignment == Left) {
+                return "raggedleft";
+            }
+            else if (alignment == Center) {
+                return "centering";
+            }
+            else if (alignment == Right) {
+                return "raggedright";
+            }
+
+            return "centering";
+        }
+    };
+
+    struct Options
+    {
+        // possible options are 8pt, 9pt, 10pt, 11pt, 12pt, 14pt, 17pt, and 20pt
+        uint8_t fontSize = 9;
+        // margin size in mm
+        uint8_t margin = 15;
+        // column separation in mm
+        uint8_t columnSep = 2;
+        QString mainFont = "Liberation Serif";
+        QString sansFont = "Liberation Sans";
+        QString monoFont = "Liberation Mono";
+
+        QVector<ColumnType> columnsTypes = {
+            ColumnType{'T', ColumnType::Center, 15, false},
+            ColumnType{'S', ColumnType::Center, 4, false},
+            ColumnType{'I', ColumnType::Center, 7, false},
+            ColumnType{'L', ColumnType::Center, 11, false},
+            ColumnType{'X', ColumnType::Center, 0, true},
+        };
+
+        Options(uint8_t fontSize,
+                uint8_t margin,
+                uint8_t columnSep,
+                QString mainFont,
+                QString sansFont,
+                QString monoFont,
+                const QVector<ColumnType> &columnsTypes)
+            : fontSize(fontSize),
+              margin(margin),
+              columnSep(columnSep),
+              mainFont(std::move(mainFont)),
+              sansFont(std::move(sansFont)),
+              monoFont(std::move(monoFont)),
+              columnsTypes(columnsTypes)
+        {}
+
+        Options() = default;
+    };
+
+    LuaDocument(std::initializer_list<std::shared_ptr<ITeXElement>> elements)
+        : BaseDocument(elements)
+    {}
+
+    LuaDocument(const QVector<std::shared_ptr<ITeXElement>> &elements, Options options)
+        : BaseDocument(elements), options(std::move(options))
+    {}
+
+    Options options;
+
+protected:
+    QString getPreamble() const override
+    {
+        QStringList preamble
+            {
+                QString("\\documentclass[russian,openany,a4paper,%1pt,landscape]{extarticle}").arg(options.fontSize),
+                "\\usepackage[russian]{babel}",
+                QString("\\usepackage[a4paper,margin=%1mm]{geometry}").arg(options.margin),
+                "\\pagewidth=297mm",
+                "\\pageheight=210mm",
+                "\\setlength{\\parindent}{0pt}",
+                "\\usepackage{lastpage}",
+                "\\usepackage{array}",
+                "\\usepackage{xltabular}",
+                "\\usepackage{fontspec}",
+                QString("\\setlength{\\tabcolsep}{%pt}").arg(options.columnSep),
+                QString("\\setmainfont{%1}").arg(options.mainFont),
+                QString("\\setsansfont{%1}").arg(options.sansFont),
+                QString("\\setmonofont{%1}").arg(options.monoFont)
+            };
+
+        for (auto const &columnType: options.columnsTypes) {
+            preamble.append(columnType.asCommand());
+        }
+
+        return preamble.join('\n');
+    }
 };
 
 bool render_pdf(const QFileInfo &outputFile, const LaTeXDocument &document, QObject *parent = nullptr)
@@ -415,27 +567,42 @@ private:
     QObject *_parent = nullptr;
 };
 
-class PdfFileRenderer final: public FileRenderer
+class PdfFileRenderer: public FileRenderer
 {
 public:
-    explicit PdfFileRenderer(QObject *parent = nullptr, int timeoutMSecs = 2000)
-        : _parent(parent), _timeoutMSecs(timeoutMSecs)
+    struct CommandDescription
+    {
+        QString name;
+        QStringList args;
+
+        CommandDescription(const QString &name, const QStringList &args)
+            : name(name), args(args)
+        {}
+
+        CommandDescription() = default;
+    };
+
+    PdfFileRenderer(QObject *parent, int timeoutMSecs, const QVector<CommandDescription> &commands)
+        : _parent(parent), _timeoutMSecs(timeoutMSecs), _commands(commands)
+    {}
+
+    PdfFileRenderer(std::initializer_list<CommandDescription> commands)
+        : _parent(nullptr), _timeoutMSecs(50000), _commands(commands)
     {}
 
     using FileRenderer::render;
 
-    bool render(const QFileInfo &output, const LaTeXDocument &document) override
+    bool render(const QFileInfo &output, const LaTeXDocument &document) override final
     {
         QTemporaryDir tmp;
         QString tmpTexFile;
         if (!writeTmpTexFile(tmp, document, tmpTexFile)) {
             return false;
         }
-        if (!generateTmpTexMeta(tmp, tmpTexFile)) {
-            return false;
-        }
-        if (!generateTmpPdf(tmp, tmpTexFile)) {
-            return false;
+        for (const auto &command: _commands) {
+            if (!launchCommandOverTexFile(tmp.path(), tmpTexFile, command.name, command.args)) {
+                return false;
+            }
         }
         if (!removeExistingOutputFile(output)) {
             return false;
@@ -447,6 +614,7 @@ public:
 private:
     QObject *_parent;
     int _timeoutMSecs;
+    QVector<CommandDescription> _commands;
 
     const QString TmpTeXFilename = "main.tex";
     const QString TmpPdfFilename = "main.pdf";
@@ -459,42 +627,18 @@ private:
         return texFileRenderer.render(tmpTexFile, document);
     }
 
-    /*!
-     * first pass of pdflatex to count pages in final document
-     */
-    bool generateTmpTexMeta(const QTemporaryDir &tmp, const QString &tmpTexFile)
+    bool launchCommandOverTexFile(const QString &dir,
+                                  const QString &texFile,
+                                  const QString &commandName,
+                                  const QStringList &commandArgs)
     {
-        return launchPDFLatex(
-            tmp.path(),
-            tmpTexFile,
-            {
-                "-halt-on-error",
-                "-draftmode"
-            });
-    }
-
-    /*!
-     * generates pdf document in tmp folder
-     */
-    bool generateTmpPdf(const QTemporaryDir &tmp, const QString &tmpTexFile)
-    {
-        return launchPDFLatex(
-            tmp.path(),
-            tmpTexFile,
-            {
-                "-halt-on-error",
-            });
-    }
-
-    bool launchPDFLatex(const QString &dir, const QString &texFile, const QStringList &arguments)
-    {
-        auto launchArguments = arguments;
+        auto launchArguments = commandArgs;
         launchArguments.append(outputDirOption(dir));
         launchArguments.append(texFile);
 
         QProcess pdflatex(_parent);
         pdflatex.setProcessChannelMode(QProcess::MergedChannels);
-        pdflatex.setProgram("pdflatex");
+        pdflatex.setProgram(commandName);
         pdflatex.setArguments(launchArguments);
         pdflatex.start();
 
@@ -505,7 +649,7 @@ private:
         return pdflatex.exitCode() == 0;
     }
 
-    bool removeExistingOutputFile(const QFileInfo &outputFileInfo)
+    static bool removeExistingOutputFile(const QFileInfo &outputFileInfo)
     {
         if (outputFileInfo.exists()) {
             return QFile(outputFileInfo.filePath()).remove();
@@ -514,10 +658,54 @@ private:
         return true;
     }
 
-    inline QString outputDirOption(const QString &dir)
+    static inline QString outputDirOption(const QString &dir)
     {
         return QString("-output-directory=%1").arg(dir);
     }
+};
+
+class PdfLaTeXFileRenderer final: public PdfFileRenderer
+{
+public:
+    PdfLaTeXFileRenderer(QObject *parent, int timeoutMSecs)
+        : PdfFileRenderer(
+        parent,
+        timeoutMSecs,
+        {
+            {"pdflatex", {"-halt-on-error", "-draftmode"}},
+            {"pdflatex", {"-halt-on-error"}}
+        })
+    {}
+
+    PdfLaTeXFileRenderer()
+        : PdfFileRenderer(
+        {
+            {"pdflatex", {"-halt-on-error", "-draftmode"}},
+            {"pdflatex", {"-halt-on-error"}}
+        })
+    {}
+};
+
+class LuaLaTeXFileRenderer final: public PdfFileRenderer
+{
+public:
+    LuaLaTeXFileRenderer(QObject *parent, int timeoutMSecs)
+        : PdfFileRenderer(
+        parent,
+        timeoutMSecs,
+        {
+            {"lualatex", {"--halt-on-error", "--draftmode"}},
+            {"lualatex", {"--halt-on-error"}}
+        })
+    {}
+
+    LuaLaTeXFileRenderer()
+        : PdfFileRenderer(
+        {
+            {"lualatex", {"--halt-on-error", "--draftmode"}},
+            {"lualatex", {"--halt-on-error"}}
+        })
+    {}
 };
 
 #endif //LATEX_H

@@ -9,6 +9,7 @@
         texlive-fonts-extra \
         texlive-extra-utils \
         texlive-latex-extra
+        texlive-luatex
 
 ## Samples
 

@@ -51,13 +51,20 @@ int main(int argc, char *argv[])
     out_file_stream.flush();
     out_file.close();
 
-//    TeXFileRenderer teXFileRenderer;
-    PdfFileRenderer pdfRenderer(nullptr, 2000);
-    if (pdfRenderer.render("my.pdf", document)) {
-        std::cout << "OK";
+    PdfLaTeXFileRenderer pdfRenderer;
+    if (pdfRenderer.render("pdflatex_my.pdf", document)) {
+        std::cout << "pdflatex OK" << std::endl;
     }
     else {
-        std::cout << "ERROR";
+        std::cout << "pdflatex ERROR" << std::endl;
+    }
+
+    LuaLaTeXFileRenderer luaRenderer;
+    if (pdfRenderer.render("lualatex_my.pdf", document)) {
+        std::cout << "lualatex OK" << std::endl;
+    }
+    else {
+        std::cout << "lualatex ERROR" << std::endl;
     }
 
     return 0;
